@@ -100,6 +100,7 @@ public class ViadeoContactsExporter {
                                     FileWriter fw = new FileWriter(filename, true);
                                     BufferedWriter bw = new BufferedWriter(fw, 32 * 1024);
                                     PrintWriter out = new PrintWriter(bw, true)) {
+                                filename=null;
                                 // for each [contact] ...
                                 int count = 0, start = Config.START_I, end = Config.END_I;
                                 for (DomElement contact : contacts) {
@@ -111,9 +112,9 @@ public class ViadeoContactsExporter {
 //                                    System.out.println(getAsJsonString(vc));
                                         String contactDetailsUrl = getContactDetailsUrl(addressbookUrlC, vc.getId());
                                         DomElement contactDetailsDom = loadContactDetails(contactDetailsUrl, webClient);
-                                        System.out.println(contactDetailsDom.asXml());
+//                                        System.out.println(contactDetailsDom.asXml());
                                         vc = parseContactDetails(vc, contactDetailsDom);
-                                        System.out.println(getAsJsonString(vc, true));
+//                                        System.out.println(getAsJsonString(vc, true));
                                         if (vc != null) {
                                             out.println(getAsJsonString(vc));
 //                                        System.out.println(count);
@@ -131,7 +132,6 @@ public class ViadeoContactsExporter {
                                     new StringBuilder()
                                             .append(totalCount)
                                             .append(" contact(s) scrapped, and saved at: ")
-                                            .append(filename)
                             );
                         }
                     }
@@ -391,7 +391,7 @@ public class ViadeoContactsExporter {
             Logger.getLogger(ViadeoContactsExporter.class.getName()).log(Level.SEVERE, null, ex);
         }
 
-        System.out.println(detailsData);
+//        System.out.println(detailsData);
         return detailsData;
     }
 

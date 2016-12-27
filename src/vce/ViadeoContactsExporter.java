@@ -92,45 +92,48 @@ public class ViadeoContactsExporter {
                         // System.out.println(contactListUl.asXml());
                         // get all the [contact] DomElements
                         List<DomElement> contacts = (List<DomElement>) contactListUl.getByXPath(getContactsGroupXPath(lc));
-                        System.out.println(contacts.size());
-                        String filename = generateFileName(c);
-                        try (
-                                FileWriter fw = new FileWriter(filename, true);
-                                BufferedWriter bw = new BufferedWriter(fw, 32 * 1024);
-                                PrintWriter out = new PrintWriter(bw, true)) {
-                            // for each [contact] ...
-                            int count = 0, start = Config.START_I, end = Config.END_I;
-                            for (DomElement contact : contacts) {
-                                ++count;
+                        final int size = contacts.size();
+                        System.out.println(size);
+                        if (size > 0) {
+                            String filename = generateFileName(c);
+                            try (
+                                    FileWriter fw = new FileWriter(filename, true);
+                                    BufferedWriter bw = new BufferedWriter(fw, 32 * 1024);
+                                    PrintWriter out = new PrintWriter(bw, true)) {
+                                // for each [contact] ...
+                                int count = 0, start = Config.START_I, end = Config.END_I;
+                                for (DomElement contact : contacts) {
+                                    ++count;
 //                            System.out.println(contact.asXml());
-                                if (count > start) {
-                                    ViadeoContact vc;
-                                    vc = parseContact(contact);
+                                    if (count > start) {
+                                        ViadeoContact vc;
+                                        vc = parseContact(contact);
 //                                    System.out.println(getAsJsonString(vc));
-                                    String contactDetailsUrl = getContactDetailsUrl(addressbookUrlC, vc.getId());
-                                    DomElement contactDetailsDom = loadContactDetails(contactDetailsUrl, webClient);
-//                                System.out.println(contactDetailsDom.asXml());
-                                    vc = parseContactDetails(vc, contactDetailsDom);
-//                                    System.out.println(getAsJsonString(vc, true));
-                                    if (vc != null) {
-                                        out.println(getAsJsonString(vc));
+                                        String contactDetailsUrl = getContactDetailsUrl(addressbookUrlC, vc.getId());
+                                        DomElement contactDetailsDom = loadContactDetails(contactDetailsUrl, webClient);
+                                        System.out.println(contactDetailsDom.asXml());
+                                        vc = parseContactDetails(vc, contactDetailsDom);
+                                        System.out.println(getAsJsonString(vc, true));
+                                        if (vc != null) {
+                                            out.println(getAsJsonString(vc));
 //                                        System.out.println(count);
-                                        ++totalCount;
-                                        vc = null;
+                                            ++totalCount;
+                                            vc = null;
+                                        }
                                     }
-                                }
-                                if (end > 0 && count > end)
-                                    break;
+                                    if (end > 0 && count > end)
+                                        break;
 
-                                System.gc();
-                            }
-                        } //  try-with-resources takes care of the closes -> http://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html
-                        System.out.println(
-                                new StringBuilder()
-                                        .append(totalCount)
-                                        .append(" contact(s) scrapped, and saved at: ")
-                                        .append(filename)
-                        );
+                                    System.gc();
+                                }
+                            } //  try-with-resources takes care of the closes -> http://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html
+                            System.out.println(
+                                    new StringBuilder()
+                                            .append(totalCount)
+                                            .append(" contact(s) scrapped, and saved at: ")
+                                            .append(filename)
+                            );
+                        }
                     }
 
                 } else {
@@ -346,66 +349,80 @@ public class ViadeoContactsExporter {
     }
 
     private static List<List<String>> initializeContactDetailsData(DomElement contactDetailsDom) {
-        List<List<String>> data = null;
+        List<List<String>> detailsData = null;
         try {
             // get DomElements & assigne values to local attribute
             DomNodeList<HtmlElement> h4s = contactDetailsDom.getElementsByTagName("h4");
             if (h4s == null)
                 throw new DomElementException();
             HtmlElement wheresElement = h4s.get(0);
+            
+            // create data container
+            detailsData = new ArrayList<>(5);
+            // initialize with null, it seems that Vector.setSize is depricated ^^"
+            for (int i = 0; i < 5; i++) detailsData.add(null);
 
-            data = new ArrayList<>(5);
-            data.add(initializeContactDetailsList(wheresElement));
+            detailsData.set(4,initializeContactDetailsList(wheresElement));
             wheresElement = null;
 
             DomNodeList<HtmlElement> uls = contactDetailsDom.getElementsByTagName("ul");
             if (uls == null)
                 throw new DomElementException();
+            
+
             for (HtmlElement ul : uls) {
                 String ulClass = ul.getAttribute("class");
-                data.add(
-                        ulClass.contains("email-list") ? initializeContactDetailsList(ul) : null);
-                data.add(
-                        ulClass.contains("main-phone") ? initializeContactDetailsList(ul) : null);
-                data.add(
-                        ulClass.contains("chat") ? initializeContactDetailsList(ul) : null);
-                data.add(
-                        ulClass.contains("social") ? initializeContactDetailsList(ul) : null);
+                boolean[] ulConditions = {
+                                ulClass.contains("email-list"),
+                                ulClass.contains("main-phone"),
+                                ulClass.contains("chat"),
+                                ulClass.contains("social")
+                            };
+                for (int i = 0; i < ulConditions.length; i++){
+                    if(ulConditions[i]){
+                        detailsData.set(i,initializeContactDetailsList(ul));
+                        break;
+                    }
+                }
             }
             uls = null;
 
         } catch (DomElementException ex) {
             Logger.getLogger(ViadeoContactsExporter.class.getName()).log(Level.SEVERE, null, ex);
         }
-        return data;
+
+        System.out.println(detailsData);
+        return detailsData;
     }
 
     private static ViadeoContact parseContact(DomElement contact) {
         ViadeoContact vc = null;
         try {
             // initialize Contact Basic Data
-            List<Object> data = initializeContactBasicData(contact);
-            if (data.isEmpty() || data.size() < 5)
+            List<Object> basicData = initializeContactBasicData(contact);
+            if (basicData.isEmpty() || basicData.size() < 5)
                 throw new VCExporterException("conatct basic data lits is empty or not complete");
             // instantiate Objects
             vc = new ViadeoContact(
                     //id
-                    (String) data.get(0),
+                    (String) basicData.get(0),
                     //name
-                    (String) data.get(1),
+                    (String) basicData.get(1),
                     //headline
-                    (String) data.get(2),
+                    (String) basicData.get(2),
                     new ContactsContact(
                             //contactNum
-                            (int) data.get(3),
+                            (int) basicData.get(3),
                             //canSeeMyDirectContacts
-                            (boolean) data.get(4),
+                            (boolean) basicData.get(4),
                             //showContacts)
-                            (boolean) data.get(5)
+                            (boolean) basicData.get(5)
                     )
             );
+
         } catch (VCExporterException ex) {
-            Logger.getLogger(ViadeoContactsExporter.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(ViadeoContactsExporter.class
+                    .getName()).log(Level.SEVERE, null, ex);
         }
         return vc;
     }
@@ -415,11 +432,11 @@ public class ViadeoContactsExporter {
         // get DomElements & assigne values to local attribute
         List<List<String>> data = initializeContactDetailsData(contactDetailsDom);
         // set [conatact] attributes
-        vc.setWhere(new Where(data.get(0)));
-        vc.setEmails(data.get(1));
-        vc.setPhones(data.get(2));
-        vc.setSocials(data.get(3));
-        vc.setChats(data.get(4));
+        vc.setEmails(data.get(0));
+        vc.setPhones(data.get(1));
+        vc.setSocials(data.get(2));
+        vc.setChats(data.get(3));
+        vc.setWhere(new Where(data.get(4)));
 
 //        System.out.println(getAsJsonString(vc));
         return vc;
@@ -448,7 +465,7 @@ public class ViadeoContactsExporter {
             }
         }
 //        System.out.println(list+"\n---------------");
-        return list.isEmpty() ? null : list;
+        return list == null || list.isEmpty() ? null : list;
     }
 
     private static String getAsJsonString(Object obj) {
@@ -459,10 +476,13 @@ public class ViadeoContactsExporter {
         String jsonInString = "{}";
         ObjectMapper mapper = new ObjectMapper();
         try { // Convert object to JSON string and pretty print
-            jsonInString = isPretty ? 
-                    mapper.writeValueAsString(obj) : mapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
+            jsonInString = isPretty
+                    ? mapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj)
+                    : mapper.writeValueAsString(obj);
+
         } catch (JsonGenerationException | IOException ex) {
-            Logger.getLogger(ViadeoContactsExporter.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(ViadeoContactsExporter.class
+                    .getName()).log(Level.SEVERE, null, ex);
         }
         return jsonInString;
     }
@@ -478,5 +498,4 @@ public class ViadeoContactsExporter {
 //            Logger.getLogger(ViadeoContactsExporter.class.getName()).log(Level.SEVERE, null, ex);
 //        }
 //    }
-
 }
